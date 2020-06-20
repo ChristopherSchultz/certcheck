@@ -2,7 +2,7 @@
 
 An X.509 certificate validator.
 
-    Usage: java CertificateExpirationChecker [options] file [options...] [file...]
+    Usage: java -jar certcheck-1.0.jar [options] file [options...] [file...]
 
     Options take effect for all files specified on the command-line after the option has been set.
 
