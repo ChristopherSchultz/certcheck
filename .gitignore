@@ -5,6 +5,11 @@ target/
 # vi temp files
 *.sw*
 
+# Eclipse
+.classpath
+.project
+.settings/
+
 # Log file
 *.log
 
