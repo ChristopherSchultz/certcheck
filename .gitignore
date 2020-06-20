@@ -2,6 +2,9 @@
 *.class
 target/
 
+# vi temp files
+*.sw*
+
 # Log file
 *.log
 
