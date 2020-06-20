@@ -5,6 +5,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
+import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
@@ -37,7 +38,27 @@ import java.util.TreeSet;
  */
 public class CertificateExpirationChecker {
     static void usage(PrintStream out) {
-        out.println("Usage: java " + CertificateExpirationChecker.class.getPackage().getName() + "." + CertificateExpirationChecker.class.getName() + " [options] file [options...] [file...]");
+        // Are we running from a JAR file? What's it's name?
+        URL url = CertificateExpirationChecker.class.getClassLoader().getResource("META-INF/maven/net.christopherschultz.certcheck/certcheck/pom.xml");
+        if(null != url && "jar".equals(url.getProtocol())) {
+            // Loaded from a JAR file; probably executable
+            // jar file name is between first ! and previous / or : of the URL's path
+            String source = url.getPath();
+            source = source.substring(0, source.indexOf('!'));
+            int pos = source.lastIndexOf('/');
+            if(pos < 0) {
+                pos = source.lastIndexOf(":");
+            }
+            if(pos < -1) {
+                pos = -1;
+            }
+            source = source.substring(pos + 1);
+
+            out.println("Usage: java -jar " + source + " [options] file [options...] [file...]");
+        } else {
+            out.println("Usage: java " + CertificateExpirationChecker.class.getName() + " [options] file [options...] [file...]");
+        }
+
         out.println();
         out.println("Options take effect for all files specified on the command-line after the option has been set.");
         out.println();
