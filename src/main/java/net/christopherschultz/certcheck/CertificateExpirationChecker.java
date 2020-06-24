@@ -174,14 +174,24 @@ public class CertificateExpirationChecker {
                 cec.out.println("UNKNOWN: Processed zero certificates");
 
                 exitCode = 3; // UNKNOWN
+
+                if(cec.debug) {
+                    cec.out.println("DEBUG: exiting with status=" + status + ", code=3");
+                }
             } else if(Status.OK == status) {
                 if(!cec.quiet) {
                     cec.out.println("OK: All certificates valid");
                 }
 
+                if(cec.debug) {
+                    cec.out.println("DEBUG: exiting with status=" + status + ", code=0");
+                }
+
                 exitCode = 0; // OK
             } else {
-                System.err.println("default exit code");
+                if(cec.debug) {
+                    cec.out.println("DEBUG: exiting with status=" + status + ", code=" + (status.ordinal()-1));
+                }
                 exitCode = status.ordinal() - 1;
             }
         }
@@ -264,7 +274,9 @@ public class CertificateExpirationChecker {
         init();
 
         Status status = Status.UNKNOWN;
-
+        if(debug) {
+            out.println("DEBUG: Beginning exec(); argindex=" + argindex + ", args.length=" + args.length);
+        }
         for(int i=argindex; i<args.length; ++i) {
             try {
                 status = status.max(processFilename(args[i]));
@@ -357,7 +369,9 @@ public class CertificateExpirationChecker {
         Status status = Status.UNKNOWN;
 
         boolean processedCert = false;
-
+        if(debug) {
+           out.println("DEBUG: Beginning process() on generator " + generator);
+        }
         for(Descriptor descriptor : generator) {
             if(null != alias && !alias.equals(descriptor.alias)) {
                 continue;
@@ -427,6 +441,7 @@ public class CertificateExpirationChecker {
                     if(verbose) {
                         out.println("OK: " + descriptor + " expires in " + expirationDays + " days (" + df.format(date) + ")");
                     }
+                    status = status.max(Status.OK);
                 } else {
                     err.println("ERROR: Unknown certificate type: " + cert.getType());
 
@@ -445,6 +460,9 @@ public class CertificateExpirationChecker {
             }
 
             status = status.max(Status.UNKNOWN);
+        }
+        if(debug) {
+           out.println("DEBUG: Completing process() on generator " + generator + ", final status=" + status);
         }
         return status;
     }
