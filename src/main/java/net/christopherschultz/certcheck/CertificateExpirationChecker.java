@@ -23,7 +23,6 @@ import java.security.cert.X509Certificate;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
 import java.util.Enumeration;
@@ -199,7 +198,8 @@ public class CertificateExpirationChecker {
         System.exit(exitCode);
     }
 
-    private static final byte[] PEM_FILE_HEADER = "-----BEGIN".getBytes(StandardCharsets.US_ASCII);
+    private static final String PEM_ENTRY_HEADER = "-----BEGIN";
+    private static final byte[] PEM_ENTRY_HEADER_BYTES = PEM_ENTRY_HEADER.getBytes(StandardCharsets.US_ASCII);
 
     private boolean debug = false;
     private boolean verbose = false;
@@ -322,12 +322,12 @@ public class CertificateExpirationChecker {
                 throw new IOException("Cannot mark/rewind");
 
             // Sniff the input stream: is this a PEM file or is this a keystore?
-            fin.mark(10);
+            fin.mark(1024);
 
-            byte[] header = new byte[10];
+            byte[] header = new byte[1024];
             int count = fin.read(header);
 
-            if(count < 10) {
+            if(count < 1024) {
                 throw new IOException("File " + filename + " is pretty tiny");
             }
 
@@ -338,7 +338,7 @@ public class CertificateExpirationChecker {
 
             DescriptorGenerator generator;
 
-            if(Arrays.equals(PEM_FILE_HEADER, header)) {
+            if(-1 < KMP.indexOf(header, PEM_ENTRY_HEADER_BYTES)) {
                 // File is PEM file
                 generator = new PEMFileGenerator(filename, fin);
             } else {
