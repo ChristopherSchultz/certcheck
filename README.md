@@ -32,3 +32,6 @@ Use Maven
 
     mvn package
 
+## Supported File Types
+
+`certcheck` supports PEM-encoded DER files (those that have the `-----BEGIN CERTIFICATE-----` and `-----END CERTIFICATE-----` markers) and any kind of key store Java can load. `certcheck` will check every certificate found in a PEM file (that is, you can have multiple certificates in the same file) and every certificate found in a keystore. Binary DER files are not supported.
