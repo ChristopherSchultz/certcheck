@@ -1,6 +1,7 @@
 package net.christopherschultz.certcheck;
 
 import java.io.BufferedInputStream;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -69,13 +70,14 @@ public class CertificateExpirationChecker {
         out.println(" -E, --error-stdout    Print errors to stdout instead of stderr.");
         out.println(" -f, --file <file>     Explicitly state that the next argument will be a file (useful for odd filenames).");
         out.println(" -h, --help            Print this help message and exit.");
+        out.println(" -i, --ignore-missing  Ignore any files mentioned on the command-line that do not exist.");
         out.println(" -m, --max      <days> Specify the maximum number of days a certificate may be valid from today.");
         out.println(" -o, --options <file>  Specify an options-file where sensitive things like passwords can be specified safely.");
         out.println(" -P, --provider <name> Specifies a security provider to be used (default=any supporting provider).");
         out.println(" -p, --password        Specify the password to be used for all keystores and files (DANGEROUS! Consider using -o).");
-        out.println(" -q, --quiet           Do not print anything if all there are no errors or warnings.");
+        out.println(" -q, --quiet           Do not print anything if there are no errors or warnings.");
         out.println(" -r, --report          Report the types of keystores supported and exit.");
-        out.println(" -s, --silent          Do out print any output; only return exit code.");
+        out.println(" -s, --silent          Do not print any output; only return exit code.");
         out.println(" -v, --verbose         Print information about all certificates processed.");
         out.println(" -S, --special <name>  Check a special keystore with the specified name (e.g. Windows-MY, KeychainStore, etc.).");
         out.println(" -w, --warning <days>  Specify the number of days before expiration that will be considered 'warning'.");
@@ -145,6 +147,8 @@ public class CertificateExpirationChecker {
                 cec.verbose = false; // Implied
             } else if("-o".equals(arg) || "--options".equals(arg)) {
                 cec.loadOptionsFile(args[++argindex]);
+            } else if("-i".equals(arg)|| "--ignore-missing".equals(arg)) {
+                cec.setIgnoreMissingFiles(true);
             } else if("--".equals(arg)) {
                 break;
             } else if("--help".equals(arg) || "-h".equals(arg)) {
@@ -170,7 +174,7 @@ public class CertificateExpirationChecker {
             status = status.max(cec.exec(args, argindex));
 
             if(Status.UNKNOWN == status) {
-                cec.out.println("UNKNOWN: Processed zero certificates");
+                cec.out.println("UNKNOWN: Unknown status; run with -v or -d flags for details");
 
                 exitCode = 3; // UNKNOWN
 
@@ -204,6 +208,7 @@ public class CertificateExpirationChecker {
     private boolean debug = false;
     private boolean verbose = false;
     private boolean quiet = false;
+    private boolean ignoreMissingFiles = false;
     private DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX");
     private String keystorePassword = "changeit";
     private String alias;
@@ -234,6 +239,14 @@ public class CertificateExpirationChecker {
 
     public void setKeystorePassword(String password) {
         this.keystorePassword = password;
+    }
+
+    public boolean getIgnoreMissingFiles() {
+        return ignoreMissingFiles;
+    }
+
+    public void setIgnoreMissingFiles(boolean ignore) {
+        this.ignoreMissingFiles = ignore;
     }
 
     public void loadOptionsFile(String file) throws IOException {
@@ -314,12 +327,32 @@ public class CertificateExpirationChecker {
     public Status processFilename(String filename) throws IOException {
         init();
 
+        if(debug) {
+            out.println("DEBUG: Processing filename " + filename);
+        }
+
         InputStream fin = null;
+
+        File file = new File(filename);
+
+        if(!file.exists() && !file.isFile()) {
+            if(getIgnoreMissingFiles()) {
+                return Status.UNKNOWN;
+            } else {
+                err.println("CRITICAL: File " + filename + " does not exist");
+
+                return Status.CRITICAL;
+            }
+        } else if(!file.canRead()) {
+            err.println("CRITICAL: Cannot read file " + filename);
+
+            return Status.CRITICAL;
+        }
 
         try {
             fin = new BufferedInputStream(new FileInputStream(filename));
             if(!fin.markSupported())
-                throw new IOException("Cannot mark/rewind");
+                throw new IOException("Cannot mark/rewind file " + filename);
 
             // Sniff the input stream: is this a PEM file or is this a keystore?
             fin.mark(1024);
@@ -327,8 +360,8 @@ public class CertificateExpirationChecker {
             byte[] header = new byte[1024];
             int count = fin.read(header);
 
-            if(count < 1024) {
-                throw new IOException("File " + filename + " is pretty tiny");
+            if(count < 512) {
+                throw new IOException("File " + filename + " is too small to contain a certificate (<512 bytes)");
             }
 
             fin.reset();
@@ -339,8 +372,20 @@ public class CertificateExpirationChecker {
             DescriptorGenerator generator;
 
             if(-1 < KMP.indexOf(header, PEM_ENTRY_HEADER_BYTES)) {
+                if(debug) {
+                    out.println("DEBUG: Read " + count + " bytes into " + filename);
+                    out.println("DEBUG: Header: " + new String(header, "ASCII"));
+                    out.println("DEBUG: Found PEM header at byte offset " + KMP.indexOf(header, PEM_ENTRY_HEADER_BYTES));
+                }
                 // File is PEM file
-                generator = new PEMFileGenerator(filename, fin);
+                try {
+                    generator = new PEMFileGenerator(filename, fin);
+                } catch (IllegalStateException ise) {
+                    err.println("File " + filename + " looks like a PEM file but could not be parsed. Malformed entry or entries?");
+                    ise.printStackTrace(err);
+
+                    return Status.ERROR;
+                }
             } else {
                 // Maybe this is a KeyStore
                 KeyStore ks = loadArbitraryKeystoreFile(filename, fin, keystorePassword, provider, keystoreTypes);
@@ -655,11 +700,17 @@ public class CertificateExpirationChecker {
         }
 
         @Override
+        public String toString() {
+            return getClass().getSimpleName() + ":" + getFilename();
+        }
+
+        @Override
         public Iterator<Descriptor> iterator() {
             return new Walker();
         }
 
         private class Walker implements Iterator<Descriptor> {
+            private int count = 0;
             private Iterator<? extends Certificate> i;
 
             public Walker() {
@@ -674,10 +725,11 @@ public class CertificateExpirationChecker {
             public Descriptor next() {
                 Certificate cert = i.next();
 
+                ++count;
                 if("X.509".equals(cert.getType())) {
-                    return new Descriptor(filename, ((X509Certificate)cert).getSubjectDN().getName(), cert);
+                    return new Descriptor(filename, "#" + count + ":" + ((X509Certificate)cert).getSubjectDN().getName(), cert);
                 } else {
-                    return new Descriptor(filename, cert.getType() + ":??", cert);
+                    return new Descriptor(filename, "#" + count + ":" + cert.getType() + ":??", cert);
                 }
             }
         }
@@ -707,6 +759,11 @@ public class CertificateExpirationChecker {
         @Override
         public String getFilename() {
             return filename;
+        }
+
+        @Override
+        public String toString() {
+            return getClass().getSimpleName() + ":" + getFilename();
         }
 
         @Override

@@ -17,7 +17,7 @@ class KMP {
      * @param haystack The array to search <i>in</i>.
      * @param needles The array to search <i>for</i>.
      *
-     * @return The index first array index at which <code>needles</code>
+     * @return The first array index at which <code>needles</code>
      * can be found within <code>haystack</code>, or <code>-1</code> if
      * <code>needles</code> does not appear within <code>haystack</code>.
      */
@@ -63,7 +63,7 @@ class KMP {
      * Computes the failure function using a boot-strapping process,
      * where the pattern is matched against itself.
      *
-     * @param pattern A byte array to compage against itself.
+     * @param pattern A byte array to compare against itself.
      * @param plen The length of the array, previously-computed and stored.
      *             (This is a very minor performance optimization)
      *
